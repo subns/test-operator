@@ -17,7 +17,10 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
+	"os"
 	"path/filepath"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -31,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	cachev1alpha1 "github.com/subns/test-operator/api/v1alpha1"
-	//+kubebuilder:scaffold:imports
+	//	+kubebuilder:scaffold:imports
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -68,10 +71,34 @@ var _ = BeforeSuite(func() {
 	//+kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
+	go initController(cfg)
+
 }, 60)
+
+func initController(cfg *rest.Config) {
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme:         scheme.Scheme,
+		Logger:         logf.Log,
+		LeaderElection: false,
+	})
+	if err != nil {
+		mgr.GetLogger().Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	if err = (&MemcachedReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		mgr.GetLogger().Error(err, "unable to create controller", "controller", "Memcached")
+		os.Exit(1)
+	}
+	mgr.Start(context.Background())
+}
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
