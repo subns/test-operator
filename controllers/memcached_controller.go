@@ -47,7 +47,15 @@ type MemcachedReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.0/pkg/reconcile
 func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	l := log.FromContext(ctx, "name", req.Name)
+
+	o := cachev1alpha1.Memcached{}
+	err := r.Get(ctx, req.NamespacedName, &o)
+	if err != nil {
+		l.Error(err, "sometihng bad happend")
+	}
+
+	l.Info("starting to handle it")
 
 	// TODO(user): your logic here
 
