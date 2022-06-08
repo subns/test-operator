@@ -18,14 +18,18 @@ package controllers
 
 import (
 	"context"
-
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	cachev1alpha1 "github.com/subns/test-operator/api/v1alpha1"
 )
+
+const memcachedFinalizer = "cache.example.com/finalizer"
 
 // MemcachedReconciler reconciles a Memcached object
 type MemcachedReconciler struct {
@@ -49,10 +53,56 @@ type MemcachedReconciler struct {
 func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx, "name", req.Name)
 
-	o := cachev1alpha1.Memcached{}
-	err := r.Get(ctx, req.NamespacedName, &o)
+	memcached := cachev1alpha1.Memcached{}
+
+	err := r.Get(ctx, req.NamespacedName, &memcached)
+
 	if err != nil {
-		l.Error(err, "sometihng bad happend")
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		l.Error(err, "unable to update memcached status2")
+		return ctrl.Result{}, err
+	}
+	status := cachev1alpha1.MemcachedStatus{
+		Replicas: memcached.Spec.Replicas,
+	}
+	memcached.Status = status
+
+	err = r.Status().Update(ctx, &memcached)
+	if err != nil {
+		l.Error(err, "unable to update memcached status")
+		return ctrl.Result{}, err
+	}
+
+	isMemcachedMarkedToBeDeleted := memcached.GetDeletionTimestamp() != nil
+	if isMemcachedMarkedToBeDeleted {
+		if controllerutil.ContainsFinalizer(&memcached, memcachedFinalizer) {
+			// Run finalization logic for memcachedFinalizer. If the
+			// finalization logic fails, don't remove the finalizer so
+			// that we can retry during the next reconciliation.
+			if err = r.finalizeMemcached(l, &memcached); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// Remove memcachedFinalizer. Once all finalizers have been
+			// removed, the object will be deleted.
+			controllerutil.RemoveFinalizer(&memcached, memcachedFinalizer)
+			err = r.Update(ctx, &memcached)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer for this CR
+	if !controllerutil.ContainsFinalizer(&memcached, memcachedFinalizer) {
+		controllerutil.AddFinalizer(&memcached, memcachedFinalizer)
+		err = r.Update(ctx, &memcached)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	l.Info("starting to handle it")
@@ -67,4 +117,13 @@ func (r *MemcachedReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&cachev1alpha1.Memcached{}).
 		Complete(r)
+}
+
+func (r *MemcachedReconciler) finalizeMemcached(reqLogger logr.Logger, m *cachev1alpha1.Memcached) error {
+	// TODO(user): Add the cleanup steps that the operator
+	// needs to do before the CR can be deleted. Examples
+	// of finalizers include performing backups and deleting
+	// resources that are not owned by this CR, like a PVC.
+	reqLogger.Info("Successfully finalized memcached")
+	return nil
 }

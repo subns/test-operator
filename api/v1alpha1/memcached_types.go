@@ -40,7 +40,7 @@ type MemcachedStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	FailedReplicas int `json:"failed_replicas,omitempty"`
+	Replicas int `json:"replicas,omitempty"`
 }
 
 //+kubebuilder:object:root=true

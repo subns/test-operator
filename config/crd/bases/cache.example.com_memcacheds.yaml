@@ -46,7 +46,7 @@ spec:
           status:
             description: MemcachedStatus defines the observed state of Memcached
             properties:
-              failed_replicas:
+              replicas:
                 type: integer
             type: object
         type: object
