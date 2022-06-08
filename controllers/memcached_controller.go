@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -52,13 +53,23 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	o := cachev1alpha1.Memcached{}
 	err := r.Get(ctx, req.NamespacedName, &o)
 	if err != nil {
-		l.Error(err, "sometihng bad happend")
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		l.Error(err, "something bad happend")
+		return ctrl.Result{}, err
 	}
 
 	l.Info("starting to handle it")
-
 	// TODO(user): your logic here
-
+	o.Status = cachev1alpha1.MemcachedStatus{}
+	o.Status.FailedReplicas = 5
+	err = r.Status().Update(ctx, &o)
+	if err != nil {
+		l.Error(err, "failed updating status")
+		return ctrl.Result{}, err
+	}
+	l.Info("updated status", "memcached", o)
 	return ctrl.Result{}, nil
 }
 
